@@ -28,3 +28,7 @@ def lookup_card(card_number, redis):
     name = redis.get(card_number + "_name")
     return (name, status)
 
+#open redis connection
+while(1):
+    bitstring = read_card(26)
+
