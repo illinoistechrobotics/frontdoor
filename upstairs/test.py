@@ -33,10 +33,10 @@ def even_parity(code):
 def display_login(id_num, name, status):
 			output = name+ ' [' +id_num+ '] '
 	if status % 2:
-		output += "Checkin"
+		output += "++CHECKIN++"
 		
 	else:
-		output += "Checkout"
+		output += "--CHECKOUT--"
 	print(ouput)
 	log.info(output)
 
@@ -65,20 +65,21 @@ def run_loop():
         #      On click (or something) take and display a picture to them
         #      After they approve it, store it somewhere, and make a new record for them
         #      Also, check them in
-		name = input("What is your name?")
-		print("I will sleep 5 seconds, then take a picture of you.")
-		print("Stand with your head in the box on the far wall")
-		print("5...")
-		time.sleep(1)
-		print("4...")
-		time.sleep(1)
-		print("3...")
-		time.sleep(1)
-		print("2...")
-		time.sleep(1)
-		print("1...")
-		time.sleep(1)
-		
-		
-		
-        pass
+        name = input("What is your name?")
+        print("I will sleep 5 seconds, then take a picture of you.")
+        print("Stand with your head in the box on the far wall")
+        print("5...")
+        time.sleep(1)
+        print("4...")
+        time.sleep(1)
+        print("3...")
+        time.sleep(1)
+        print("2...")
+        time.sleep(1)
+        print("1...")
+        time.sleep(1)
+        img = cam.getBuffer()
+        #TODO: actually display the photo
+        redis.set(line+".name", name)
+        redis.set(line+".status", 1)
+        redis.set(line+".img",img)
