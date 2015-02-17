@@ -25,6 +25,12 @@ def even_parity(code):
         a += code[bit]
     return not bool(a % 2)
 
+def odd_parity(code):
+    a = 0
+    for bit in [x-1 for x in [2,3,5,6,8,9,11,12,14,15,17,18,20,21,23,24,26,27,29,30,32,33,35]]:
+        a += code[bit]
+    return bool(a % 2)
+
 def display_login(id_num, status):
     pass
 
