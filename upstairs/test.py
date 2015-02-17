@@ -3,6 +3,7 @@ import redis
 import logging
 import time
 from VideoCapture import Device
+import PIL
 
 log = logging.getLogger(__name__)
 #On the laptop, the Arduino enumerates as COM3
@@ -10,7 +11,7 @@ log = logging.getLogger(__name__)
 
 ser = serial.Serial("COM3", 115200) #I'm not going to specify a timeout so I can be blocking on the serial port
 cam = Device()
-red = redis.Redis()
+red = redis.StrictRedis(host='localhost', port=6379, db=0)
 
 def check_parity(code):
     if len(code) is not 35:
@@ -40,10 +41,12 @@ def display_login(id_num, name, status):
     output = name+ ' [' +id_num+ '] '
     if status % 2:
         output += "++CHECKIN++"
-
     else:
         output += "--CHECKOUT--"
-    print(ouput)
+    print(output)
+    #img_str = red.get(id_num+'.img')
+    #img = PIL.Image.fromstring("RGBA", (1280, 720), img_str)
+    #img.show("Face")
     log.info(output)
 
 def run_loop():
@@ -52,7 +55,7 @@ def run_loop():
         #TODO: log misread
         log.error("Line missized: ignoring")
         return
-    if check_parity(line) is not true:
+    if not check_parity(line):
         #TODO: log parity failure
         log.error("Parity error: ignoring")
         return
@@ -61,8 +64,8 @@ def run_loop():
     if name is not None:
         #If the user exists, toggle their in lab status and display that to them
         #Send an update hook to the itr website
-        status = red.incr(line)
-        display_checkin(line, name, status)
+        status = red.incr(line+'.status')
+        display_login(line, name, status)
         pass
     else:
         #If they don't exist, prompt them to add themselves
@@ -71,7 +74,7 @@ def run_loop():
         #      On click (or something) take and display a picture to them
         #      After they approve it, store it somewhere, and make a new record for them
         #      Also, check them in
-        name = input("What is your name?")
+        name = raw_input("What is your name?")
         print("I will sleep 5 seconds, then take a picture of you.")
         print("Stand with your head in the box on the far wall")
         print("5...")
@@ -84,8 +87,13 @@ def run_loop():
         time.sleep(1)
         print("1...")
         time.sleep(1)
-        img = cam.getBuffer()
+        img = cam.getImage()
+        img.show()
         #TODO: actually display the photo
-        redis.set(line+".name", name)
-        redis.set(line+".status", 1)
-        redis.set(line+".img",img)
+        red.set(line+".name", name)
+        red.set(line+".status", 1)
+        #red.set(line+".img",img)
+
+print "starting"
+while True:
+    run_loop()
