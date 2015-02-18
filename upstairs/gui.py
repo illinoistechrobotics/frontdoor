@@ -98,35 +98,14 @@ def run_loop():
         #      On click (or something) take and display a picture to them
         #      After they approve it, store it somewhere, and make a new record for them
         #      Also, check them in
-        name = raw_input("What is your name?")
-        print("I will sleep 5 seconds, then take a picture of you.")
-        print("Stand with your head in the box on the far wall")
-        print("5...")
-        time.sleep(1)
-        print("4...")
-        time.sleep(1)
-        print("3...")
-        time.sleep(1)
-        print("2...")
-        time.sleep(1)
-        print("1...")
-        time.sleep(1)
-        img = cam.getImage()
-        img.show()
-        #TODO: actually display the photo
-        red.set(line+".name", name)
-        red.set(line+".status", 1)
-        #red.set(line+".img",img)
+        run_entry()
 
-def test_gui():
+def run_entry():
     root = Tk()
     gui = PhotoEntry(root)
     root.mainloop()
     root.destroy()
-    time.sleep(5)
 
 print "starting"
 while True:
-    print "top of gui"
-    test_gui()
-    print "bottom of gui"
+    run_loop()
