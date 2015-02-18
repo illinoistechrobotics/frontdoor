@@ -5,6 +5,7 @@ import logging
 import time
 from VideoCapture import Device
 import PIL
+import PIL.ImageTk
 import prox
 
 log = logging.getLogger(__name__)
@@ -15,36 +16,49 @@ ser = serial.Serial("COM3", 115200) #I'm not going to specify a timeout so I can
 cam = Device()
 red = redis.StrictRedis(host='localhost', port=6379, db=0)
 
-class Entry:
-    def __init__(self, master):
+class PhotoEntry:
+    def __init__(self, master, id_num):
+        self.id_num = id_num 
+        
         self.frame = Frame(master)
         self.frame.pack()
 
-        self.name_box = Text(frame)
-        self.name_box.pack()
+        self.instructions = Label(self.frame, text="Enter your name in the box, then click 'Take Photo.' The shutter will release 5 seconds after you click that button.")
+        self.instructions.pack()
 
-        self.picture = Label(frame)
-        self.picture.pack()
+        self.name_box = Entry(self.frame)
+        self.name_box.pack(fill=X)
 
-        self.name_button = Button(frame, text="Submit Name/Take Photo", command=self.grab_name)
-        self.name_button.pack()
+        self.name_button = Button(self.frame, text="Take Photo (5 second delay)", command=self.grab_name)
+        self.name_button.pack(fill=X)
 
-        self.photo_button = Button(frame, text="Submit Photo", command=self.submit)
+        self.photo_button = Button(self.frame, text="Submit Photo", state=DISABLED, command=self.submit)
+        self.photo_button.pack(fill=X)
 
+        self.picture = None
+        self.img_string = ""
 
     def grab_name(self):
-        self.name = self.name_box.get(0, 100)
+        self.name = self.name_box.get()
         time.sleep(5)
         img = cam.getImage()
+        self.img_string = img.tostring()
+        img.thumbnail((800,600), PIL.Image.ANTIALIAS)
         photo = PIL.ImageTk.PhotoImage(img)
-        self.picture.config(image=photo)
+        if self.picture is not None:
+            self.picture.destroy()
+        self.picture = Label(self.frame, image=photo)
+        self.picture.image = photo
+        self.picture.pack()
+        self.photo_button.config(state=NORMAL)
+        self.instructions.config(text="If you are happy with the photo, click 'Submit Photo', otherwise take a new photo")
 
     def submit(self):
         if self.name is None:
             return
-        self.red.set(line+".name", name)
-        self.red.set(line+".status", 1)
-        #TODO: store photo
+        red.set(self.id_num+".name", self.name)
+        red.set(self.id_num+".status", 1)
+        red.set(self.id_num+".img",self.img_string)
         self.frame.quit()
 
 def display_login(id_num, name, status):
@@ -106,11 +120,13 @@ def run_loop():
 
 def test_gui():
     root = Tk()
-    gui = Entry(root)
+    gui = PhotoEntry(root)
     root.mainloop()
     root.destroy()
     time.sleep(5)
 
 print "starting"
 while True:
+    print "top of gui"
     test_gui()
+    print "bottom of gui"
