@@ -61,36 +61,62 @@ class PhotoEntry:
         red.set(self.id_num+".img",self.img_string)
         self.frame.quit()
 
-def display_login(id_num, name, status):
-    output = name+ ' [' +id_num+ '] '
-    if status % 2:
-        output += "++CHECKIN++"
-    else:
-        output += "--CHECKOUT--"
-    print(output)
-    #img_str = red.get(id_num+'.img')
-    #img = PIL.Image.fromstring("RGBA", (1280, 720), img_str)
-    #img.show("Face")
-    log.info(output)
+class Login:
+    def __init__(self,master,id_num):
+        frame = Frame(master)
+        frame.pack()
+        
+        topline = red.get(id_num+".name")+"\n["+id_num+"]"
+        nameline = Label(frame, text=topline, bg="black", fg="white", font = "Monospace 30")
+        nameline.pack(fill=X)
 
+        status = int(red.get(id_num+'.status'))
+        if status % 2:
+            statusline = Label(frame, text="CHECKIN", bg="black", fg="green", font="Monospace 30")
+            statusline.pack(fill=X)
+        else:
+            statusline = Label(frame, text="CHECKOUT", bg="black", fg="red", font = "Monospace 30")
+            statusline.pack(fill=X)
+
+        img_str = red.get(id_num+'.img')
+        if img_str is not None:
+            img = PIL.Image.fromstring('RGB',(1280,720),img_str)
+            img.thumbnail((800,600), PIL.Image.ANTIALIAS)
+            photo = PIL.ImageTk.PhotoImage(img)
+            picture = Label(frame, image=photo)
+            picture.image = photo
+            picture.pack()      
+            
+
+def display_login(id_num):
+    root = Tk()
+    gui = Login(root,id_num)
+    root.after(5000, lambda: root.destroy())
+    root.mainloop()
+    
+def run_entry(id_num):
+    root = Tk()
+    gui = PhotoEntry(root,id_num)
+    root.mainloop()
+    root.destroy()
+    
 def run_loop():
-    line = ser.readline().strip()
-    if len(line) != 35:
+    id_num = ser.readline().strip()
+    if len(id_num) != 35:
         #TODO: log misread
         log.error("Line missized: ignoring")
         return
-    if not check_parity(line):
+    if not prox.check_parity(id_num):
         #TODO: log parity failure
         log.error("Parity error: ignoring")
         return
     #Check redis for the user with that id
-    name = red.get(line+'.name')
+    name = red.get(id_num+'.name')
     if name is not None:
         #If the user exists, toggle their in lab status and display that to them
         #Send an update hook to the itr website
-        status = red.incr(line+'.status')
-        display_login(line, name, status)
-        pass
+        status = red.incr(id_num+'.status')
+        display_login(id_num)
     else:
         #If they don't exist, prompt them to add themselves
         #      Field for name
@@ -98,14 +124,7 @@ def run_loop():
         #      On click (or something) take and display a picture to them
         #      After they approve it, store it somewhere, and make a new record for them
         #      Also, check them in
-        run_entry()
+        run_entry(id_num)
 
-def run_entry():
-    root = Tk()
-    gui = PhotoEntry(root)
-    root.mainloop()
-    root.destroy()
-
-print "starting"
 while True:
     run_loop()
