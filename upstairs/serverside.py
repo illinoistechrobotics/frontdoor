@@ -1,4 +1,5 @@
-import PIL
+import PIL.Image
+import redis
 import os.path
 
 red = redis.StrictRedis(host='localhost', port=6379, db=0)
@@ -24,4 +25,9 @@ for id_num in id_nums:
     out += '<div><img src="photos/'+id_num+'.jpg"'+'alt="'+name+'" />'
     out += '<h2>'+name+'</h2></div>'
 
-out += '</body></html>
+out += '</body></html>'
+
+outfile = open('members.html','w')
+outfile.write(out)
+outfile.close()
+print out

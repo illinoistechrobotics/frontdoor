@@ -13,11 +13,11 @@ log = logging.getLogger(__name__)
 #I've specified the baud rate to be max (115200)
 
 ser = serial.Serial("COM3", 115200) #I'm not going to specify a timeout so I can be blocking on the serial port
-cam = Device()
 red = redis.StrictRedis(host='localhost', port=6379, db=0)
 
 class PhotoEntry:
     def __init__(self, master, id_num):
+        self.cam = Device()
         self.id_num = id_num 
         
         self.frame = Frame(master)
@@ -41,7 +41,7 @@ class PhotoEntry:
     def grab_name(self):
         self.name = self.name_box.get()
         time.sleep(5)
-        img = cam.getImage()
+        img = self.cam.getImage()
         self.img_string = img.tostring()
         img.thumbnail((800,600), PIL.Image.ANTIALIAS)
         photo = PIL.ImageTk.PhotoImage(img)
@@ -59,6 +59,7 @@ class PhotoEntry:
         red.set(self.id_num+".name", self.name)
         red.set(self.id_num+".status", 1)
         red.set(self.id_num+".img",self.img_string)
+        red.sadd("inlab",self.id_num)
         self.frame.quit()
 
 class Login:
@@ -74,9 +75,11 @@ class Login:
         if status % 2:
             statusline = Label(frame, text="CHECKIN", bg="black", fg="green", font="Monospace 30")
             statusline.pack(fill=X)
+            red.sadd("inlab",id_num)
         else:
             statusline = Label(frame, text="CHECKOUT", bg="black", fg="red", font = "Monospace 30")
             statusline.pack(fill=X)
+            red.srem("inlab",id_num)
 
         img_str = red.get(id_num+'.img')
         if img_str is not None:
