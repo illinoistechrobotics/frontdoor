@@ -1,12 +1,12 @@
 /*
 	 Web Server
 
-	 A simple web server that shows the value of the analog input pins.
+	 A simple web server that shows the value of a digital input pin
 	 using an Arduino Wiznet Ethernet shield. 
 
 Circuit:
  * Ethernet shield attached to pins 10, 11, 12, 13
- * Analog inputs attached to pins A0 through A5 (optional)
+ 
 
  created 18 Dec 2009
  by David A. Mellis
@@ -36,7 +36,7 @@ EthernetServer server(80);
 void setup() {
 	// Open serial communications and wait for port to open:
 	pinMode(DOORPIN,INPUT);
-	Serial.begin(9600);
+	Serial.begin(57600);
 	while (!Serial) {
 		; // wait for serial port to connect. Needed for Leonardo only
 	}
@@ -61,7 +61,7 @@ void loop() {
 		while (client.connected()) {
 			if (client.available()) {
 				char c = client.read();
-				Serial.write(c);
+//				Serial.write(c);
 				// if you've gotten to the end of the line (received a newline
 				// character) and the line is blank, the http request has ended,
 				// so you can send a reply
