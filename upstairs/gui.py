@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 import logging
 import os
 from tkinter import *
@@ -28,6 +28,7 @@ class PhotoEntry:
         self.instructions.pack()
 
         self.name_box = Entry(self.frame)
+        self.name_box.focus_set()
         self.name_box.pack(fill=X)
 
         self.name_button = Button(self.frame, text="Take Photo (5 second delay)", command=self.grab_name)
@@ -35,6 +36,8 @@ class PhotoEntry:
 
         self.photo_button = Button(self.frame, text="Submit Photo", state=DISABLED, command=self.submit)
         self.photo_button.pack(fill=X)
+
+        master.bind("<Return>", lambda x: (self.grab_name() if self.picture is None else self.submit()))
 
         self.picture = None
         self.img_string = ""
