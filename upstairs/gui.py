@@ -1,4 +1,5 @@
 #!/usr/bin/python3
+import datetime
 import logging
 import os
 from tkinter import *
@@ -6,16 +7,47 @@ from tkinter import *
 import PIL.Image
 import PIL.ImageTk
 import prox
-import redis
-import serial
+from sqlalchemy import Column, Integer, String, DateTime, LargeBinary, ForeignKey
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 log = logging.getLogger(__name__)
 # On the laptop, the Arduino enumerates as COM3
 # I've specified the baud rate to be max (115200)
 
-ser = serial.Serial("/dev/ttyACM0",
-                    115200)  # I'm not going to specify a timeout so I can be blocking on the serial port
-red = redis.StrictRedis(host='localhost', port=6379, db=0)
+# ser = serial.Serial("/dev/ttyACM0",
+#                    115200)  # I'm not going to specify a timeout so I can be blocking on the serial port
+# red = redis.StrictRedis(host='localhost', port=6379, db=0)
+
+# Database Setup
+# for debugging
+engine = create_engine('sqlite:///:memory:', echo=True)
+# for production
+# engine = create_engine('mysql://user:pass@localhost:3306/frontdoor')
+Base = declarative_base()
+
+
+class Member(Base):
+    __tablename__ = 'members'
+
+    mid = Column(Integer, primary_key=True)
+    name = Column(String)
+    picture = Column(LargeBinary)
+
+
+class CheckIn(Base):
+    __tablename__ = 'checkin'
+
+    id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
+    mid = Column(Integer, ForeignKey("members.mid"), nullable=False)
+    timeIn = Column(DateTime)
+    timeOut = Column(DateTime)
+
+
+Base.metadata.create_all(engine)
+Session = sessionmaker(bind=engine)
+
 
 class PhotoEntry:
     def __init__(self, master, id_num):
@@ -63,38 +95,49 @@ class PhotoEntry:
     def submit(self):
         if self.name is None or self.img_string is "":
             return
-        red.set(str(self.id_num) + ".name", self.name)
-        red.set(str(self.id_num) + ".status", 1)
-        red.set(str(self.id_num) + ".img", self.img_string)
-        red.sadd("inlab",self.id_num)
+
+        session = Session()
+        newMember = Member(id=self.id_num, name=self.name, picture=self.img_string)
+        newLog = CheckIn(mid=self.id_num, timeIn=datetime.datetime().now(), timeOut=None)
+        session.add_all([newMember, newLog])
+        session.commit()
         self.frame.quit()
+
 
 class Login:
     def __init__(self,master,id_num):
+        session = Session()
         frame = Frame(master)
         frame.pack()
 
-        topline = "%s\n[%s]" % (red.get("%s.name" % str(id_num)), str(id_num))
+        member = session.query('members')[id_num]
+
+        topline = "%s\n[%s]" % (member.name, str(id_num))
         nameline = Label(frame, text=topline, bg="black", fg="white", font = "Monospace 30")
         nameline.pack(fill=X)
 
-        status = int(red.get(str(id_num) + '.status'))
-        if status % 2:
-            statusline = Label(frame, text="CHECKIN", bg="black", fg="green", font="Monospace 30")
-            statusline.pack(fill=X)
-            red.sadd("inlab",id_num)
-        else:
-            statusline = Label(frame, text="CHECKOUT", bg="black", fg="red", font = "Monospace 30")
-            statusline.pack(fill=X)
-            red.srem("inlab",id_num)
+        lastLog = session.query('checkin').filter_by(mid=id_num).filter_by(timeOut=None)
 
-        img_str = red.get(str(id_num) + '.img')
-        if img_str is not None:
+        if lastLog.count:
+            statusline = Label(frame, text="CHECKED IN", bg="black", fg="green", font="Monospace 30")
+            statusline.pack(fill=X)
+            newLog = CheckIn(mid=id_num, timeIn=datetime.datetime().now(), timeOut=None)
+            session.add(newLog)
+
+        else:
+            statusline = Label(frame, text="CHECKED OUT", bg="black", fg="red", font="Monospace 30")
+            statusline.pack(fill=X)
+            lastLog.timeOut = datetime.datetime().now()
+
+        img_str = member.picture
+        if img_str:
             img = PIL.Image.frombytes('RGB', (1280, 720), img_str)
             photo = PIL.ImageTk.PhotoImage(img)
             picture = Label(frame, image=photo)
             picture.image = photo
-            picture.pack()      
+            picture.pack()
+
+        session.commit()
             
 
 def display_login(id_num):
@@ -102,13 +145,15 @@ def display_login(id_num):
     gui = Login(root,id_num)
     root.after(5000, lambda: root.destroy())
     root.mainloop()
-    
+
+
 def run_entry(id_num):
     root = Tk()
     gui = PhotoEntry(root,id_num)
     root.mainloop()
     root.destroy()
-    
+
+
 def run_loop():
     id_num = ser.readline().strip()
     if len(id_num) != 35:
@@ -119,12 +164,12 @@ def run_loop():
         #TODO: log parity failure
         log.error("Parity error: ignoring")
         return
-    #Check redis for the user with that id
-    name = red.get(str(id_num) + '.name')
-    if name is not None:
+
+    session = Session()
+    memberExists = session.query("members").filter_by(mid=id_num).count() > 0
+
+    if memberExists:
         #If the user exists, toggle their in lab status and display that to them
-        #Send an update hook to the itr website
-        status = red.incr(str(id_num) + '.status')
         display_login(id_num)
     else:
         #If they don't exist, prompt them to add themselves
@@ -134,6 +179,7 @@ def run_loop():
         #      After they approve it, store it somewhere, and make a new record for them
         #      Also, check them in
         run_entry(id_num)
+
 
 while True:
     run_loop()
