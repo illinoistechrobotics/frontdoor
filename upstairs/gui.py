@@ -2,6 +2,7 @@
 import datetime
 import logging
 import os
+import serial
 from tkinter import *
 
 import PIL.Image
@@ -16,8 +17,8 @@ log = logging.getLogger(__name__)
 # On the laptop, the Arduino enumerates as COM3
 # I've specified the baud rate to be max (115200)
 
-# ser = serial.Serial("/dev/ttyACM0",
-#                    115200)  # I'm not going to specify a timeout so I can be blocking on the serial port
+ser = serial.Serial("/dev/ttyACM0",
+                    115200)  # I'm not going to specify a timeout so I can be blocking on the serial port
 # red = redis.StrictRedis(host='localhost', port=6379, db=0)
 
 # Database Setup
@@ -31,7 +32,7 @@ Base = declarative_base()
 class Member(Base):
     __tablename__ = 'members'
 
-    mid = Column(Integer, primary_key=True)
+    mid = Column(String, primary_key=True)
     name = Column(String)
     picture = Column(LargeBinary)
 
@@ -40,7 +41,7 @@ class CheckIn(Base):
     __tablename__ = 'checkin'
 
     id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    mid = Column(Integer, ForeignKey("members.mid"), nullable=False)
+    mid = Column(String, ForeignKey("members.mid"), nullable=False)
     timeIn = Column(DateTime)
     timeOut = Column(DateTime)
 
@@ -52,11 +53,12 @@ Session = sessionmaker(bind=engine)
 class PhotoEntry:
     def __init__(self, master, id_num):
         self.id_num = id_num
-        
+
         self.frame = Frame(master)
         self.frame.pack()
 
-        self.instructions = Label(self.frame, text="Enter your name in the box, then click 'Take Photo.' The shutter will release 5 seconds after you click that button.")
+        self.instructions = Label(self.frame,
+                                  text="Enter your name in the box, then click 'Take Photo.' The shutter will release 5 seconds after you click that button.")
         self.instructions.pack()
 
         self.name_box = Entry(self.frame)
@@ -90,44 +92,46 @@ class PhotoEntry:
         self.picture.pack()
         self.img_string = img.tobytes()
         self.photo_button.config(state=NORMAL)
-        self.instructions.config(text="If you are happy with the photo, click 'Submit Photo', otherwise take a new photo")
+        self.instructions.config(
+            text="If you are happy with the photo, click 'Submit Photo', otherwise take a new photo")
 
     def submit(self):
         if self.name is None or self.img_string is "":
             return
 
         session = Session()
-        newMember = Member(id=self.id_num, name=self.name, picture=self.img_string)
-        newLog = CheckIn(mid=self.id_num, timeIn=datetime.datetime().now(), timeOut=None)
+        newMember = Member(mid=self.id_num, name=self.name, picture=self.img_string)
+        newLog = CheckIn(mid=self.id_num, timeIn=datetime.datetime.utcnow(), timeOut=None)
         session.add_all([newMember, newLog])
         session.commit()
         self.frame.quit()
 
 
 class Login:
-    def __init__(self,master,id_num):
+    def __init__(self, master, id_num):
         session = Session()
         frame = Frame(master)
         frame.pack()
 
-        member = session.query('members')[id_num]
+        member = session.query(Member).filter_by(mid=id_num).first()
 
         topline = "%s\n[%s]" % (member.name, str(id_num))
-        nameline = Label(frame, text=topline, bg="black", fg="white", font = "Monospace 30")
+        nameline = Label(frame, text=topline, bg="black", fg="white", font="Monospace 30")
         nameline.pack(fill=X)
 
-        lastLog = session.query('checkin').filter_by(mid=id_num).filter_by(timeOut=None)
+        lastLog = session.query(CheckIn).filter_by(mid=id_num).filter_by(timeOut=None)
 
-        if lastLog.count:
+        if lastLog.count() == 0:
             statusline = Label(frame, text="CHECKED IN", bg="black", fg="green", font="Monospace 30")
             statusline.pack(fill=X)
-            newLog = CheckIn(mid=id_num, timeIn=datetime.datetime().now(), timeOut=None)
+            newLog = CheckIn(mid=id_num, timeIn=datetime.datetime.utcnow(), timeOut=None)
             session.add(newLog)
 
         else:
+            lastLog = lastLog.first()
             statusline = Label(frame, text="CHECKED OUT", bg="black", fg="red", font="Monospace 30")
             statusline.pack(fill=X)
-            lastLog.timeOut = datetime.datetime().now()
+            lastLog.timeOut = datetime.datetime.utcnow()
 
         img_str = member.picture
         if img_str:
@@ -138,41 +142,42 @@ class Login:
             picture.pack()
 
         session.commit()
-            
+
 
 def display_login(id_num):
     root = Tk()
-    gui = Login(root,id_num)
+    gui = Login(root, id_num)
     root.after(5000, lambda: root.destroy())
     root.mainloop()
 
 
 def run_entry(id_num):
     root = Tk()
-    gui = PhotoEntry(root,id_num)
+    gui = PhotoEntry(root, id_num)
     root.mainloop()
     root.destroy()
 
 
 def run_loop():
     id_num = ser.readline().strip()
+    print(id_num)
     if len(id_num) != 35:
-        #TODO: log misread
+        # TODO: log misread
         log.error("Line missized: ignoring")
         return
     if not prox.check_parity(id_num):
-        #TODO: log parity failure
+        # TODO: log parity failure
         log.error("Parity error: ignoring")
         return
 
     session = Session()
-    memberExists = session.query("members").filter_by(mid=id_num).count() > 0
+    memberExists = session.query(Member).filter(Member.mid == id_num).count() > 0
 
     if memberExists:
-        #If the user exists, toggle their in lab status and display that to them
+        # If the user exists, toggle their in lab status and display that to them
         display_login(id_num)
     else:
-        #If they don't exist, prompt them to add themselves
+        # If they don't exist, prompt them to add themselves
         #      Field for name
         #      Display webcam
         #      On click (or something) take and display a picture to them
