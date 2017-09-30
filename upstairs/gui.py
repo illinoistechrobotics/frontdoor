@@ -2,7 +2,8 @@
 import datetime
 import logging
 import os
-import serial
+#import serial
+import configparser
 from tkinter import *
 
 import PIL.Image
@@ -17,31 +18,52 @@ log = logging.getLogger(__name__)
 # On the laptop, the Arduino enumerates as COM3
 # I've specified the baud rate to be max (115200)
 
-ser = serial.Serial("/dev/ttyACM0",
-                    115200)  # I'm not going to specify a timeout so I can be blocking on the serial port
-# red = redis.StrictRedis(host='localhost', port=6379, db=0)
+config = configparser.ConfigParser()
+if not config.read('config.cfg'):
+    config.add_section('Serial')
+    config.set('Serial', 'Baud', '115200')
+    config.set('Serial', 'Port', '/dev/ttyACM0')
+
+    config.add_section('Database')
+    config.set('Database', 'ConnectionString', 'sqlite:///:memory:')
+
+    config.add_section('SSH')
+    config.set('SSH', 'Password', 'pass')
+    config.set('SSH', 'Username', 'user')
+    config.set('SSH', 'PortToForward', '3306')
+    config.set('SSH', 'Address', '127.0.0.1')
+    config.set('SSH', 'Enable', 'true')
+
+    with open('config.cfg', 'w') as configfile:
+        config.write(configfile)
+
+    print('Please fill out config.cfg, then restart the program.')
+    exit(1)
+
+ser = serial.Serial(config.get('Serial', 'Port'),
+                    config.getint('Serial', 'Baud'))
 
 # Database Setup
 # for debugging
-engine = create_engine('sqlite:///:memory:', echo=True)
+# engine = create_engine('sqlite:///:memory:', echo=True)
 # for production
-# engine = create_engine('mysql://user:pass@localhost:3306/frontdoor')
+engine = create_engine(config.get('Database', 'ConnectionString'))
 Base = declarative_base()
 
 
 class Member(Base):
     __tablename__ = 'members'
 
-    mid = Column(String, primary_key=True)
-    name = Column(String)
-    picture = Column(LargeBinary)
+    mid = Column(String(length=40), primary_key=True)
+    name = Column(String(length=100))
+    # picture = Column(LargeBinary)
 
 
 class CheckIn(Base):
     __tablename__ = 'checkin'
 
     id = Column(Integer, primary_key=True, autoincrement=True, nullable=False)
-    mid = Column(String, ForeignKey("members.mid"), nullable=False)
+    mid = Column(String(length=40), ForeignKey("members.mid"), nullable=False)
     timeIn = Column(DateTime)
     timeOut = Column(DateTime)
 
@@ -81,9 +103,9 @@ class PhotoEntry:
 
         os.system('mpv --length=5 /dev/video0')
 
-        os.system('ffmpeg -f v4l2 -i /dev/video0 -video_size 1280x720 -vframes 1 temp_image.png -y')
+        os.system('ffmpeg -f v4l2 -i /dev/video0 -video_size 1280x720 -vframes 1 images/%s.png -y' % str(self.id_num).replace("'", ''))
 
-        img = PIL.Image.open("temp_image.png")
+        img = PIL.Image.open("images/%s.png" % str(self.id_num).replace("'", ''))
         photo = PIL.ImageTk.PhotoImage(img)
         if self.picture is not None:
             self.picture.destroy()
@@ -100,7 +122,7 @@ class PhotoEntry:
             return
 
         session = Session()
-        newMember = Member(mid=self.id_num, name=self.name, picture=self.img_string)
+        newMember = Member(mid=self.id_num, name=self.name)
         newLog = CheckIn(mid=self.id_num, timeIn=datetime.datetime.utcnow(), timeOut=None)
         session.add_all([newMember, newLog])
         session.commit()
@@ -133,9 +155,8 @@ class Login:
             statusline.pack(fill=X)
             lastLog.timeOut = datetime.datetime.utcnow()
 
-        img_str = member.picture
-        if img_str:
-            img = PIL.Image.frombytes('RGB', (1280, 720), img_str)
+        if os.path.isfile("images/%s.png" % str(id_num).replace("'", '')):
+            img = PIL.Image.open("images/%s.png" % str(id_num).replace("'", ''))
             photo = PIL.ImageTk.PhotoImage(img)
             picture = Label(frame, image=photo)
             picture.image = photo
