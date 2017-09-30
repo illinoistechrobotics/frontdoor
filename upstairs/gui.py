@@ -61,8 +61,7 @@ if config.getboolean('SSH', 'Enable'):
 engine = create_engine(
     config.get('Database', 'ConnectionString'),
     pool_recycle=3600,
-    pool_size=5,
-    pool_pre_ping=True,
+    pool_size=5
 )
 Base = declarative_base()
 
