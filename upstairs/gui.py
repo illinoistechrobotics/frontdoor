@@ -9,6 +9,7 @@ from tkinter import *
 import PIL.Image
 import PIL.ImageTk
 import prox
+from sshtunnel import SSHTunnelForwarder
 from sqlalchemy import Column, Integer, String, DateTime, LargeBinary, ForeignKey
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -30,7 +31,8 @@ if not config.read('config.cfg'):
     config.add_section('SSH')
     config.set('SSH', 'Password', 'pass')
     config.set('SSH', 'Username', 'user')
-    config.set('SSH', 'PortToForward', '3306')
+    config.set('SSH', 'ServerPort', '3306')
+    config.set('SSH', 'ClientPort', '3307')
     config.set('SSH', 'Address', '127.0.0.1')
     config.set('SSH', 'Enable', 'true')
 
@@ -42,6 +44,18 @@ if not config.read('config.cfg'):
 
 ser = serial.Serial(config.get('Serial', 'Port'),
                     config.getint('Serial', 'Baud'))
+
+forwarder = SSHTunnelForwarder(
+        config.get('SSH', 'Address'),
+        ssh_username=config.get('SSH', 'Username'),
+        ssh_password=config.get('SSH', 'Password'),
+        remote_bind_address=('127.0.0.1', config.getint('SSH', 'ServerPort')),
+        local_bind_address=('127.0.0.1', config.getint('SSH', 'ClientPort')),
+        set_keepalive=5
+    )
+
+if config.getboolean('SSH', 'Enable'):
+    forwarder.start()
 
 # Database Setup
 # for debugging
