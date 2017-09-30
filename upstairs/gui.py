@@ -56,12 +56,14 @@ forwarder = SSHTunnelForwarder(
 
 if config.getboolean('SSH', 'Enable'):
     forwarder.start()
+    print('[SSH] Opened SSH tunnel with %s:%d' % (forwarder.ssh_host, forwarder.ssh_port))
 
-# Database Setup
-# for debugging
-# engine = create_engine('sqlite:///:memory:', echo=True)
-# for production
-engine = create_engine(config.get('Database', 'ConnectionString'))
+engine = create_engine(
+    config.get('Database', 'ConnectionString'),
+    pool_recycle=3600,
+    pool_size=5,
+    pool_pre_ping=True,
+)
 Base = declarative_base()
 
 
@@ -140,6 +142,7 @@ class PhotoEntry:
         newLog = CheckIn(mid=self.id_num, timeIn=datetime.datetime.utcnow(), timeOut=None)
         session.add_all([newMember, newLog])
         session.commit()
+        session.close()
         self.frame.quit()
 
 
@@ -177,6 +180,7 @@ class Login:
             picture.pack()
 
         session.commit()
+        session.close()
 
 
 def display_login(id_num):
@@ -195,7 +199,6 @@ def run_entry(id_num):
 
 def run_loop():
     id_num = ser.readline().strip()
-    print(id_num)
     if len(id_num) != 35:
         # TODO: log misread
         log.error("Line missized: ignoring")
@@ -207,6 +210,7 @@ def run_loop():
 
     session = Session()
     memberExists = session.query(Member).filter(Member.mid == id_num).count() > 0
+    session.close()
 
     if memberExists:
         # If the user exists, toggle their in lab status and display that to them
