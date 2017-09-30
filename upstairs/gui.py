@@ -2,7 +2,7 @@
 import datetime
 import logging
 import os
-#import serial
+import serial
 import configparser
 from tkinter import *
 
