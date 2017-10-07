@@ -4,11 +4,13 @@ import logging
 import os
 import serial
 import configparser
+import time
 from tkinter import *
 
 import PIL.Image
 import PIL.ImageTk
 import prox
+from threading import Lock, Thread
 from sshtunnel import SSHTunnelForwarder
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func
 from sqlalchemy import create_engine
@@ -43,8 +45,7 @@ if not config.read('config.cfg'):
     exit(1)
 
 ser = serial.Serial(config.get('Serial', 'Port'),
-                    config.getint('Serial', 'Baud'),
-                    inter_byte_timeout=21600)   # 6 hours
+                    config.getint('Serial', 'Baud'))
 
 forwarder = SSHTunnelForwarder(
         config.get('SSH', 'Address'),
@@ -139,7 +140,7 @@ class PhotoEntry:
 
         session = Session()
         newMember = Member(mid=self.id_num, name=self.name)
-        newLog = CheckIn(mid=self.id_num, timeIn=datetime.datetime.utcnow(), timeOut=None)
+        newLog = CheckIn(mid=self.id_num, timeIn=func.now(), timeOut=None)
         session.add_all([newMember, newLog])
         session.commit()
         session.close()
@@ -163,14 +164,14 @@ class Login:
         if lastLog.count() == 0:
             statusline = Label(frame, text="CHECKED IN", bg="black", fg="green", font="Monospace 30")
             statusline.pack(fill=X)
-            newLog = CheckIn(mid=id_num, timeIn=datetime.datetime.utcnow(), timeOut=None)
+            newLog = CheckIn(mid=id_num, timeIn=func.now(), timeOut=None)
             session.add(newLog)
 
         else:
             lastLog = lastLog.first()
             statusline = Label(frame, text="CHECKED OUT", bg="black", fg="red", font="Monospace 30")
             statusline.pack(fill=X)
-            lastLog.timeOut = datetime.datetime.utcnow()
+            lastLog.timeOut = func.now()
 
         if os.path.isfile("images/%s.png" % str(id_num).replace("'", '')):
             img = PIL.Image.open("images/%s.png" % str(id_num).replace("'", ''))
@@ -197,17 +198,16 @@ def run_entry(id_num):
     root.destroy()
 
 
+timeoutCounter = 0
+timeLock = Lock()
+
+
 def run_loop():
+    global timeoutCounter, timeLock
     id_num = ser.readline().strip()
-    if len(id_num) == 0:
-        # timeout hit, so sign everyone out
-        # TODO: check to see if any doors are open before clearing database
-
-        session = Session()
-        notSignedOut = session.update(CheckIn).where(CheckIn.timeOut is None).values(timeOut=func.now())
-        session.commit()
-
-        return
+    timeLock.acquire()
+    timeoutCounter = 0
+    timeLock.release()
     if len(id_num) != 35:
         # TODO: log misread
         log.error("Line missized: ignoring")
@@ -233,6 +233,24 @@ def run_loop():
         #      Also, check them in
         run_entry(id_num)
 
+
+# automatically sign people out after 8h of no activity in the lab
+def timeout():
+    global timeoutCounter, timeLock
+    time.sleep(1)
+    timeLock.acquire()
+    timeoutCounter += 1
+
+    if timeoutCounter > 28800:  # 8 hours
+        session = Session()
+        memberExists = session.update(CheckIn).where(CheckIn.timeOut is None).values(timeOut=func.now())
+        session.close()
+        timeoutCounter = 0
+
+    timeLock.release()
+
+
+Thread(target=timeout).start()
 
 while True:
     run_loop()
