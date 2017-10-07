@@ -10,7 +10,7 @@ import PIL.Image
 import PIL.ImageTk
 import prox
 from sshtunnel import SSHTunnelForwarder
-from sqlalchemy import Column, Integer, String, DateTime, LargeBinary, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, func
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -43,7 +43,8 @@ if not config.read('config.cfg'):
     exit(1)
 
 ser = serial.Serial(config.get('Serial', 'Port'),
-                    config.getint('Serial', 'Baud'))
+                    config.getint('Serial', 'Baud'),
+                    inter_byte_timeout=21600)   # 6 hours
 
 forwarder = SSHTunnelForwarder(
         config.get('SSH', 'Address'),
@@ -198,6 +199,15 @@ def run_entry(id_num):
 
 def run_loop():
     id_num = ser.readline().strip()
+    if len(id_num) == 0:
+        # timeout hit, so sign everyone out
+        # TODO: check to see if any doors are open before clearing database
+
+        session = Session()
+        notSignedOut = session.update(CheckIn).where(CheckIn.timeOut is None).values(timeOut=func.now())
+        session.commit()
+
+        return
     if len(id_num) != 35:
         # TODO: log misread
         log.error("Line missized: ignoring")
